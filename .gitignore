@@ -1,0 +1,4 @@
+# archivos de bases de datos
+*.accdb
+# archivos de bloqueo de bases de datos
+*.laccdb
