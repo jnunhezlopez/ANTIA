@@ -60,29 +60,34 @@ Variables de configuración que cada formulario hijo sobreescribe en `Form_Load`
 - `camposNumericosPositivos`, `camposFechaCompleta` (Public Variant array; Public para que `modFormUtils` los lea).
 
 Procedimientos:
-- `Form_Open` — con `OpenArgs="Vacio"` abre el RecordSource en 0 registros (`WHERE 1=2`).
-- `Form_Load` — inicializa arrays y RecordSource; si no hay registros va a nuevo, si no → `ModoLectura`.
+- `Form_Open` — stub; la apertura con `OpenArgs="Vacio"` se resuelve en `Form_Load` (en `Open`, `tablaBase` aún no está inicializado).
+- `Form_Load` — inicializa arrays y RecordSource; con `OpenArgs="Vacio"` abre en 0 registros (`WHERE 1=2`); si no hay registros va a nuevo, si no → `ModoLectura`.
 - `Form_Current` — registro nuevo → `ModoEdicion`; si no → `ModoLectura` + `RellenarFormulario`.
+- `Form_BeforeUpdate` — valida antes de guardar cualquier vía (PgDn/PgUp, botones de navegación, `cmdGuardar`, cierre); si la validación falla `Cancel = True` → el registro no se guarda y se permanece en él.
+- `Form_KeyDown` — con `KeyPreview=True` (activado en `Form_Load`) bloquea PgDn/PgUp (`vbKeyNext`/`vbKeyPrior`) mientras se está en modo edición (`AllowEdits=True`), para que no abandonen el registro a mitad de la introducción; en modo lectura la navegación por teclado sigue funcionando. Ojo: `KeyPreview` es una propiedad de diseño, NO se hereda — hay que ponerla a `True` en cada formulario hijo (propiedad u hoja "Key Preview = Yes") y copiar también `Form_KeyDown` a su módulo.
 - `RellenarFormulario` — stub público; cada formulario hijo implementa su lógica (cargas de componentes relacionados).
 - `cmdNuevo_Click` / `cmdEditar_Click` / `cmdGuardar_Click` / `cmdCancelar_Click` / `cmdEliminar_Click` / `cmdBuscar_Click` / `cmdCerrar_Click`.
+- `cmdCancelar_Click` — deshace los cambios (`Undo`); si queda en un registro nuevo sin guardar salta a uno existente.
+- `cmdEliminar_Click` — pide confirmación (`Msg_Confirmacion`) y habilita temporalmente `AllowDeletions` (en `ModoLectura` está a `False`).
 - `cmdBuscar_Click` — usa `AbrirBuscadorUniversal(tablaBase, "ID", "Nombre", "ID, Nombre", "0,100")`; ojo: asume campo "ID" y "Nombre" (adaptar al esquema objetivo con `ID_*`).
 - Navegación: `cmdNextRegis_Click`, `cmdPrevRegs_Click`, `cmdFirstRegs_Click`, `cmdLastRegs_Click`.
 - `ModoLectura` — Form.AllowEdits/Additions/Deletions=False, `Form_Bloquear Me, True`, muestra botones de edición/nuevo/eliminar/buscar.
-- `ModoEdicion` — desbloquea, muestra Guardar/Cancelar, deshabilita Nuevo/Eliminar/Buscar.
+- `ModoEdicion` — AllowEdits/Additions/Deletions=True, desbloquea, muestra Guardar/Cancelar, deshabilita Nuevo/Eliminar/Buscar.
 
 ### `Form_F_BuscadorUniversal.vb` — buscador universal (modal, vía TempVars)
 Recibe parámetros desde `modFormUtils.AbrirBuscadorUniversal` mediante TempVars:
 `BU_tabla`, `BU_campoID`, `BU_campoTexto`, `BU_camposMostrar`, `BU_anchos`; devuelve el ID seleccionado en `TempVars("ResultadoBuscador")`.
-- `Form_Load` — lee los TempVars; el filtrado se dispara desde `txtBuscar`.
-- `txtBuscar_AfterUpdate` — SQL con `LIKE '*…*'`, escapa comillas simples, calcula ColumnCount/ColumnWidths desde `camposMostrar`/`anchos`.
-- `cmdAceptar_Click`, `lstResultados_DblClick`, `lstResultados_KeyDown` — fijan `ResultadoBuscador` y cierran; `cmdCancelar_Click` anula.
-- `Form_Unload` — limpia los TempVars `BU_*`.
-- Pendiente: falta aplicar el desbloqueo del `lstResultados` y el RowSource en `Form_Load` está vacío a propósito (búsqueda progresiva).
+- `Form_Load` — lee los TempVars (con protección si no existen); RowSource vacío a propósito (la búsqueda la dispara `txtBuscar`).
+- `txtBuscar_Change` — búsqueda progresiva: relanza el filtrado en cada pulsación.
+- `txtBuscar_AfterUpdate` — SQL con `LIKE '*…*'`, escapa comillas simples y comodines (`* ? # [ ]`), calcula ColumnCount/ColumnWidths desde `camposMostrar`/`anchos` (la columna de la clave, primera, se oculta a 0 cm).
+- `cmdAceptar_Click`, `lstResultados_DblClick`, `lstResultados_KeyDown` — fijan `ResultadoBuscador` y cierran; `cmdCancelar_Click` anula (deja `ResultadoBuscador` vacío).
+- `Form_Unload` — limpia los TempVars `BU_*` (NO `ResultadoBuscador`, que lee el llamador tras el modal).
+- Pendiente: falta aplicar el desbloqueo del `lstResultados`.
 
 ### `modFormUtils.vb` — utilidades globales de formularios
 - `Form_Limpiar(frm)` — limpia TextBox/ComboBox (evita controles `txtID_*`), Requery de ListBox.
 - `Form_Bloquear(frm, bloquear, camposSiempreBloqueados)` — bloquea/desbloquea TextBox/ComboBox/ListBox; los "siempre bloqueados" quedan `Locked=True, Enabled=True`.
-- `Form_Validar(frm, camposObligatorios)` — valida campos no vacíos.
+- `Form_Validar(frm, camposObligatorios)` — valida campos no vacíos; si un control no existe avisa y no falla.
 - `Form_ValidarAvanzado(frm)` — valida `camposNumericosPositivos` y `camposFechaCompleta` (usa `Val_*`).
 - Combos: `Form_CargarComboDependiente`, `Form_CargarComboTabla` (ColumnCount=2, ancho "0cm;2cm"), `Form_CargaTextBoxTabla`.
 - `Combo_TieneDatos(cbo)`.
@@ -91,7 +96,7 @@ Recibe parámetros desde `modFormUtils.AbrirBuscadorUniversal` mediante TempVars
 - Navegación: `Form_Siguiente`, `Form_Anterior`.
 - `Form_AbrirEnRegistro(form, campoClave, valorClave)`.
 - Campos relacionados: `Form_CargarCamposRelacionados(sql, controles())`, `Form_CargarCamposRelacionadosEnCadena(frm, tablaOrigen, …)`.
-- Validadores: `Val_LongitudMinima`, `Val_HoraCompleta`, `Val_FechaCompleta`, `Val_NumeroPositivo`, `Val_EsNumero`.
+- Validadores: `Val_LongitudMinima`, `Val_HoraCompleta`, `Val_FechaCompleta`, `Val_NumeroPositivo`, `Val_EsNumero` (`Val_HoraCompleta` y `Val_FechaCompleta` tratan el vacío como válido; la obligatoriedad la decide `Form_Validar`).
 
 ## Notas de mantenimiento para agentes
 

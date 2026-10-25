@@ -49,7 +49,9 @@ Public Sub Form_Bloquear(frm As Form, bloquear As Boolean, ParamArray controles(
     Dim arr() As Variant
 
     ' Obtener array interno correcto
-    If IsArray(controles(0)) Then
+    If UBound(controles) < 0 Then
+        arr = Array()
+    ElseIf IsArray(controles(0)) Then
         arr = controles(0)
     Else
         arr = controles
@@ -112,7 +114,9 @@ Public Function Form_Validar(frm As Form, ParamArray controles()) As Boolean
     Dim arr() As Variant
 
     ' Obtener array interno correcto
-    If IsArray(controles(0)) Then
+    If UBound(controles) < 0 Then
+        arr = Array()
+    ElseIf IsArray(controles(0)) Then
         arr = controles(0)
     Else
         arr = controles
@@ -121,7 +125,15 @@ Public Function Form_Validar(frm As Form, ParamArray controles()) As Boolean
     For i = LBound(arr) To UBound(arr)
 
         Nombre = arr(i)
+        On Error Resume Next
         Set ctl = frm.Controls(Nombre)
+        If ctl Is Nothing Then
+            On Error GoTo 0
+            MsgBox "El control '" & Nombre & "' no se encuentra en el formulario.", vbCritical
+            Form_Validar = False
+            Exit Function
+        End If
+        On Error GoTo 0
         
         If Nz(ctl.Value, "") = "" Then
         'If IsNull(ctl) Or ctl.Value = "" Then
@@ -202,7 +214,7 @@ Public Sub Form_CargarComboTabla(cbo As ComboBox, tabla As String, campoID As St
     cbo.ColumnCount = 2
     cbo.ColumnWidths = "0cm;2cm"
 End Sub
-Public Sub Form_CargaTextBoxTabla(txt As TextBox, tabla As String, campoID As String, valorID As Integer, campoTexto As String)
+Public Sub Form_CargaTextBoxTabla(txt As TextBox, tabla As String, campoID As String, valorID As Long, campoTexto As String)
 Dim valor As String
 
 valor = Nz(DLookup(campoTexto, tabla, campoID & "=" & valorID), "")
@@ -259,7 +271,7 @@ End Function
 Public Function AbrirBuscadorUniversal(tabla As String, campoID As String, _
                                        campoTexto As String, camposMostrar As String, anchos As String) As Variant
     'control básico de errores
-    If tabla = "" Or campoID = "" Or campoTexto = "" Or anchos = "" Then
+    If tabla = "" Or campoID = "" Or campoTexto = "" Or camposMostrar = "" Or anchos = "" Then
         MsgBox "Parámetros del buscador incompletos.", vbCritical
         Exit Function
     End If
@@ -330,6 +342,11 @@ Public Sub Form_CargarCamposRelacionados(sql As String, controles() As Control)
             Else
                 controles(i).Value = Null
             End If
+        Next i
+    Else
+        'sin resultados: limpiar para no dejar valores obsoletos
+        For i = LBound(controles) To UBound(controles)
+            controles(i).Value = Null
         Next i
     End If
 
@@ -406,6 +423,12 @@ End Function
 Public Function Val_HoraCompleta(valor As Variant) As Boolean
     Dim h As Integer, m As Integer
 
+    'vacío: se considera válido; la obligatoriedad la decide Form_Validar
+    If Nz(valor, "") = "" Then
+        Val_HoraCompleta = True
+        Exit Function
+    End If
+
     If Not IsDate("01/01/2000 " & Nz(valor, "")) Then
         Val_HoraCompleta = False
         Exit Function
@@ -417,7 +440,13 @@ Public Function Val_HoraCompleta(valor As Variant) As Boolean
     Val_HoraCompleta = (h >= 0 And h <= 23 And m >= 0 And m <= 59)
 End Function
 Public Function Val_FechaCompleta(valor As Variant) As Boolean
-    
+
+    'vacío: se considera válido; la obligatoriedad la decide Form_Validar
+    If Nz(valor, "") = "" Then
+        Val_FechaCompleta = True
+        Exit Function
+    End If
+
     If Not IsDate(Nz(valor, "")) Then
         Val_FechaCompleta = False
         Exit Function

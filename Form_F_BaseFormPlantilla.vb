@@ -12,13 +12,8 @@ Private tablaBase As String
 
 
 Private Sub Form_Open(Cancel As Integer)
-
-
-If Nz(Me.OpenArgs, "") = "Vacio" Then
-Me.RecordSource = "SELECT * FROM " & tablaBase & " WHERE 1=2;"
-End If
-
-
+'la apertura con OpenArgs="Vacio" se gestiona en Form_Load,
+'una vez que tablaBase ya está inicializado
 End Sub
 
 
@@ -26,13 +21,23 @@ Private Sub Form_Load()
 'introducir la tabla principal que gestiona el formulario
 tablaBase = ""
 
+'redirigir las teclas al formulario para poder interceptar PgDn/PgUp
+Me.KeyPreview = True
+
 camposObligatorios = Array()
 camposSiempreBloqueados = Array()
 camposNumericosPositivos = Array()
 camposFechaCompleta = Array()
-Me.RecordSource = tablaBase
+
+'OpenArgs="Vacio" -> abrir sin registros (WHERE 1=2)
+If Nz(Me.OpenArgs, "") = "Vacio" Then
+    Me.RecordSource = "SELECT * FROM " & tablaBase & " WHERE 1=2;"
+Else
+    Me.RecordSource = tablaBase
+End If
+
 Me.Requery
-If Me.RecordsetClone.RecordCount = 0 Then
+If Me.Recordset.RecordCount = 0 Then
     DoCmd.GoToRecord , , acNewRec
 Else
     Call ModoLectura
@@ -53,6 +58,33 @@ Else
     RellenarFormulario
 End If
 
+
+End Sub
+
+
+Private Sub Form_BeforeUpdate(Cancel As Integer)
+
+'valida antes de guardar el registro (navegación con PgDn/PgUp, guardado, cierre...)
+'con Cancel=True se evita que el registro se guarde y se abandone sin validar
+    If Not Form_Validar(Me, camposObligatorios) Then
+        Cancel = True
+        Exit Sub
+    End If
+    If Not Form_ValidarAvanzado(Me) Then
+        Cancel = True
+        Exit Sub
+    End If
+
+End Sub
+
+
+Private Sub Form_KeyDown(KeyCode As Integer, Shift As Integer)
+
+'en modo edición, PgDn/PgUp no abandonan el registro actual
+' (en modo lectura sí se permite navegar con ellas)
+    If (KeyCode = vbKeyNext Or KeyCode = vbKeyPrior) And Me.AllowEdits Then
+        KeyCode = 0
+    End If
 
 End Sub
 
@@ -106,6 +138,13 @@ Private Sub cmdCancelar_Click()
         DoCmd.RunCommand acCmdUndo
     End If
 
+    'si queda en un registro nuevo sin guardar, salir a un registro existente
+    If Me.NewRecord Then
+        If Me.Recordset.RecordCount > 0 Then
+            DoCmd.GoToRecord , , acFirst
+        End If
+    End If
+
     Call ModoLectura
 
 
@@ -114,13 +153,19 @@ Private Sub cmdEliminar_Click()
 On Error GoTo Err_cmdEliminar_Click
 
 
+    'en ModoLectura AllowDeletions está a False; hay que habilitarlo temporalmente
+    If Not Msg_Confirmacion("¿Desea eliminar el registro actual?") Then Exit Sub
+
+    Me.AllowDeletions = True
     'DoCmd.RunCommand acCmdSelectRecord
     DoCmd.RunCommand acCmdDeleteRecord
 
 Exit_cmdEliminar_Click:
+    Me.AllowDeletions = False
     Exit Sub
 
 Err_cmdEliminar_Click:
+    Me.AllowDeletions = False
     MsgBox Err.Description
     Resume Exit_cmdEliminar_Click
     
@@ -235,6 +280,7 @@ Private Sub ModoEdicion()
 
     Me.AllowEdits = True
     Me.AllowAdditions = True
+    Me.AllowDeletions = True
 
     Form_Bloquear Me, False, camposSiempreBloqueados
 

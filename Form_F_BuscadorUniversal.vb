@@ -22,29 +22,25 @@ End Sub
 
 Private Sub cmdCancelar_Click()
 
-    TempVars!Buscador_Seleccion = Null
+    TempVars("ResultadoBuscador") = ""
     DoCmd.Close acForm, Me.Name
 
 End Sub
 
 Private Sub Form_Load()
-Dim sql As String
 
-    
+    'si el formulario se abre sin parámetros (p. ej. en diseño), no fallar
+    On Error Resume Next
     origenDatos = TempVars("BU_tabla")
     campoKey = TempVars("BU_campoID")
     campoMostrar = TempVars("BU_campoTexto")
     columnasMostrar = TempVars("BU_camposMostrar")
     anchos = TempVars("BU_anchos")
- 'abrir buscador vacío
+    On Error GoTo 0
+
+    'abrir buscador vacío (la búsqueda la dispara txtBuscar)
     Me.lstResultados.RowSource = ""
 
-'    sql = "SELECT " & campoKey & ", " & columnasMostrar & _
-          " FROM " & origenDatos & _
-        " ORDER BY " & campoMostrar & ";"
-
-'    Me.lstResultados.RowSource = sql
-    
 End Sub
 
 Private Sub Form_Unload(Cancel As Integer)
@@ -94,8 +90,15 @@ sql = "SELECT " & campoKey & ", " & columnasMostrar & _
       " FROM " & origenDatos
 
 If criterio <> "" Then
+    'escapar comodines y comillas simples para búsqueda literal
+    criterio = Replace(criterio, "[", "[[]")
+    criterio = Replace(criterio, "*", "[*]")
+    criterio = Replace(criterio, "?", "[?]")
+    criterio = Replace(criterio, "#", "[#]")
+    criterio = Replace(criterio, "'", "''")
+
     sql = sql & " WHERE " & campoMostrar & _
-          " LIKE '*" & Replace(criterio, "'", "''") & "*'"
+          " LIKE '*" & criterio & "*'"
 End If
 
 sql = sql & " ORDER BY " & campoMostrar & ";"
@@ -103,7 +106,8 @@ campos = Split(columnasMostrar, ",")
 
 Me.lstResultados.ColumnCount = UBound(campos) + 2 'el id no va en la lista aunque se muestra
 lanchos = Split(anchos, ",")
-anchosfinal = ""
+'ancho 0 para la columna de la clave; los anchos recibidos van a las columnas visibles
+anchosfinal = "0cm;"
 For Each anc In lanchos
     anchosfinal = anchosfinal & anc / 100 * Me.lstResultados.Width / 1000 & "cm;"
 Next
@@ -111,4 +115,9 @@ anchosfinal = Left(anchosfinal, Len(anchosfinal) - 1)
 Me.lstResultados.ColumnWidths = anchosfinal
 Me.lstResultados.RowSource = sql
 
+End Sub
+
+Private Sub txtBuscar_Change()
+'búsqueda progresiva: refiltra la lista en cada pulsación
+    txtBuscar_AfterUpdate
 End Sub
